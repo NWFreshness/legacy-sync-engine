@@ -289,10 +289,9 @@ class Store:
                 (*record.values(), expected, origin),
             )
             conn.execute(
-                """
-                INSERT INTO legacy.CHANGE_LOG (table_name, record_id, operation, payload)
-                VALUES (%s, %s, 'U', %s)
-                """,
+                sql.SQL(
+                    'INSERT INTO legacy."CHANGE_LOG" (table_name, record_id, operation, payload) VALUES (%s, %s, \'U\', %s)'
+                ),
                 (ltable, str(record[pk]), j(record)),
             )
         return before

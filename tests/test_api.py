@@ -38,8 +38,8 @@ def test_trigger_sync_shape(client):
     assert body["status"] == "completed"
 
 
-def test_conflicts_shape_after_queue(seeded_db, engine, client):
-    engine.poll_once("inventory", "legacy_to_modern")
+def test_conflicts_shape_after_queue(seeded_engine, client):
+    seeded_engine.poll_once("inventory", "legacy_to_modern")
     r = client.get("/api/conflicts?status=pending")
     assert r.status_code == 200
     conflict = r.json()[0]
@@ -55,8 +55,8 @@ def test_conflicts_shape_after_queue(seeded_db, engine, client):
     assert "quantity" in legacy_opt["state"]
 
 
-def test_audit_shape(seeded_db, engine, client):
-    engine.poll_once("customers", "modern_to_legacy")
+def test_audit_shape(seeded_engine, client):
+    seeded_engine.poll_once("customers", "modern_to_legacy")
     r = client.get("/api/audit?limit=10")
     assert r.status_code == 200
     assert r.json(), "audit must not be empty after a sync"
@@ -75,7 +75,7 @@ def test_webhook_bad_source_rejected(client):
     assert r.status_code == 400
 
 
-def test_audit_filter_by_table(seeded_db, engine, client):
-    engine.poll_once("customers", "modern_to_legacy")
+def test_audit_filter_by_table(seeded_engine, client):
+    seeded_engine.poll_once("customers", "modern_to_legacy")
     r = client.get("/api/audit?table=customers")
     assert all(e["table_name"] == "customers" for e in r.json())

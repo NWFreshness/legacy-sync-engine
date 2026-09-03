@@ -70,7 +70,9 @@ class SyncEngine:
             "modern_to_legacy" if payload.source == "modern" else "legacy_to_modern"
         )
         mapping = self.mappings.get(payload.table)
-        record_id = self._record_id(mapping, payload.record, payload.source)
+        # Source-side PK is the raw field from the incoming record.
+        src_pk_field = MODERN_PK[mapping.table] if payload.source == "modern" else LEGACY_PK[mapping.table]
+        record_id = str(payload.record.get(src_pk_field) or uuid4())
         with self._lock:
             if not self.store.claim_event(
                 payload.event_id, direction, payload.table, record_id,
@@ -168,11 +170,9 @@ class SyncEngine:
                 self.store.touch_sync(table, direction, last_event_id)
         else:
             rows = self.db.legacy.execute(
-                """
-                SELECT * FROM legacy.CHANGE_LOG
-                 WHERE table_name = %s AND changed_at > %s
-                 ORDER BY changed_at
-                """,
+                sql.SQL(
+                    'SELECT * FROM legacy."CHANGE_LOG" WHERE table_name = %s AND changed_at > %s ORDER BY changed_at'
+                ),
                 (LEGACY_TABLE[table], since),
             ).fetchall()
             for row in rows:
@@ -209,9 +209,20 @@ class SyncEngine:
         source: Literal["modern", "legacy"] = (
             "modern" if direction == "modern_to_legacy" else "legacy"
         )
+        # The "record_id" we got from the caller is the *source-side* PK.
+        # For lookups on the far side, we need the far-side PK, which the
+        # mapping derives via transforms (e.g. id -> CUST_ID truncation).
+        far_id = self._far_side_pk(mapping, incoming, direction)
         try:
-            modern_row = self.store.get_modern(table, record_id)
-            legacy_row = self.store.get_legacy(table, record_id)
+            if direction == "modern_to_legacy":
+                modern_row = self.store.get_modern(table, record_id)
+                legacy_row = self.store.get_legacy(table, far_id) if far_id else None
+            else:
+                legacy_row = self.store.get_legacy(table, record_id)
+                # Validate far_id is a usable PK for the far-side column type.
+                # If the mapping produced something the far-side column can't
+                # accept (e.g. a non-UUID for a UUID column), treat as new.
+                modern_row = self._safe_get_modern(table, far_id)
             decision = self._decide(mapping, modern_row, legacy_row, source, incoming_ts)
 
             if decision == "conflict":
@@ -233,12 +244,12 @@ class SyncEngine:
                 return SyncOutcome(event_id, "no_change", "superseded by conflict policy")
 
             mapped = apply_mapping(mapping, incoming, direction)
-            mapped = self._with_pk(mapping, mapped, record_id, direction)
             origin = DIRECTION_ORIGIN[direction]
             if direction == "modern_to_legacy":
-                self.store.upsert_legacy(table, mapped, origin)
+                # mapped already carries the legacy PK (from the id transform).
+                before_far = self.store.upsert_legacy(table, mapped, origin)
             else:
-                self.store.upsert_modern(table, mapped, origin)
+                before_far = self.store.upsert_modern(table, mapped, origin)
             self.store.finalize_event(
                 event_id, "applied",
                 before={"modern": modern_row, "legacy": legacy_row},
@@ -342,12 +353,33 @@ class SyncEngine:
             return dt.datetime.combine(raw, dt.time.min, tzinfo=dt.UTC)
         return None
 
-    def _record_id(
-        self, mapping: TableMapping, record: dict[str, Any], source: Literal["modern", "legacy"]
+    def _safe_get_modern(self, table: str, far_id: str) -> dict[str, Any] | None:
+        """Lookup a modern row, returning None if far_id is empty or the
+        far-side column type rejects it (e.g. non-UUID for a UUID PK).
+        Rolls back the failed query so the connection stays usable."""
+        if not far_id:
+            return None
+        try:
+            return self.store.get_modern(table, far_id)
+        except Exception:
+            try:
+                self.db.modern.rollback()
+            except Exception:
+                pass
+            return None
+
+    def _far_side_pk(
+        self, mapping: TableMapping, incoming: dict[str, Any], direction: SyncDirection
     ) -> str:
-        if source == "modern":
-            return str(record.get(MODERN_PK[mapping.table]) or uuid4())
-        return str(record.get(LEGACY_PK[mapping.table]) or uuid4())
+        """Derive the far-side PK by applying the mapping's id field transform."""
+        from .mappings import MappingError, apply_mapping
+
+        try:
+            mapped = apply_mapping(mapping, incoming, direction)
+        except MappingError:
+            mapped = {}
+        pk = MODERN_PK[mapping.table] if direction == "legacy_to_modern" else LEGACY_PK[mapping.table]
+        return str(mapped.get(pk, ""))
 
     def _with_pk(
         self,

@@ -1,7 +1,7 @@
-"""Test harness: disposable Postgres cluster (initdb/pg_ctl) + two fresh
-databases per test session. No Docker, no system Postgres, no shared state.
+"""Test harness: disposable Postgres cluster (initdb/pg_ctl) + one shared
+database pair per session. Each test resets schemas via TRUNCATE before
+running, so tests are isolated without per-test database creation overhead.
 
-The cluster starts once per session; each test gets truncate-clean tables.
 Migrations run through app.migrate.migrate() so tests exercise the exact
 files compose will run (db/migrations/001_init.sql).
 """
@@ -84,35 +84,26 @@ def pg_cluster():
     _run([str(PGBIN / "pg_ctl"), "-D", str(datadir), "-m", "fast", "-w", "stop"])
 
 
-@pytest.fixture()
-def env(pg_cluster, monkeypatch):
-    monkeypatch.setenv("MODERN_DSN", pg_cluster["modern"])
-    monkeypatch.setenv("LEGACY_DSN", pg_cluster["legacy"])
-    return pg_cluster
+# Set DSN env vars at import time so the session-scoped `db` fixture (and any
+# module that reads DSNs at import time) sees the right values regardless of
+# pytest fixture resolution order.
+@pytest.fixture(scope="session", autouse=True)
+def _set_test_env(pg_cluster):
+    os.environ["MODERN_DSN"] = pg_cluster["modern"]
+    os.environ["LEGACY_DSN"] = pg_cluster["legacy"]
+    yield
+    os.environ.pop("MODERN_DSN", None)
+    os.environ.pop("LEGACY_DSN", None)
 
 
 @pytest.fixture()
-def db(env):
+def db(pg_cluster):
     from app.db import Database, DbConfig
-    from app.migrate import migrate
 
     database = Database(DbConfig.from_env())
     database.connect()
-    migrate(database)  # full schema, both sides
     yield database
-    _truncate_all(database)
     database.close()
-
-
-@pytest.fixture()
-def seeded_db(db):
-    from app.migrate import SEEDS_DIR
-
-    for seed in sorted(SEEDS_DIR.glob("*.sql")):
-        for conn in (db.modern, db.legacy):
-            with conn.transaction():
-                conn.execute(sql.SQL(cast(LiteralString, seed.read_text())))
-    return db
 
 
 def _truncate_all(database) -> None:
@@ -122,7 +113,6 @@ def _truncate_all(database) -> None:
                 """
                 SELECT schemaname, tablename FROM pg_tables
                  WHERE schemaname IN ('modern', 'legacy', 'public')
-                   AND tablename <> 'schema_migrations'
                 """
             ).fetchall()
             for r in rows:
@@ -134,12 +124,52 @@ def _truncate_all(database) -> None:
 
 
 @pytest.fixture()
-def engine(db):
+def clean_db(db):
+    """Truncate all application tables before the test runs."""
+    _truncate_all(db)
+    yield db
+
+
+@pytest.fixture()
+def migrated_db(clean_db):
+    from app.migrate import migrate
+
+    migrate(clean_db)
+    yield clean_db
+
+
+@pytest.fixture()
+def seeded_db(migrated_db):
+    from app.migrate import _split
+
+    for seed_path in sorted((Path(__file__).resolve().parent.parent / "db" / "seeds").glob("*.sql")):
+        parts = _split(seed_path.read_text())
+        for name, conn in (("modern", migrated_db.modern), ("legacy", migrated_db.legacy)):
+            chunks = parts["MODERN"] + parts["BOTH"] if name == "modern" else parts["LEGACY"] + parts["BOTH"]
+            with conn.transaction():
+                for chunk in chunks:
+                    s = chunk.strip()
+                    if s:
+                        conn.execute(sql.SQL(cast(LiteralString, s)))
+    yield migrated_db
+
+
+@pytest.fixture()
+def engine(migrated_db):
     from app.engine import SyncEngine
     from app.mappings import MappingRegistry
 
     mappings = MappingRegistry.load(Path(__file__).resolve().parent.parent / "docs" / "mappings")
-    return SyncEngine(db, mappings)
+    yield SyncEngine(migrated_db, mappings)
+
+
+@pytest.fixture()
+def seeded_engine(seeded_db):
+    from app.engine import SyncEngine
+    from app.mappings import MappingRegistry
+
+    mappings = MappingRegistry.load(Path(__file__).resolve().parent.parent / "docs" / "mappings")
+    yield SyncEngine(seeded_db, mappings)
 
 
 @pytest.fixture()
@@ -148,8 +178,8 @@ def client(engine):
 
     from app.main import app
 
-    # Bypass lifespan (we manage the engine/DB ourselves); the app reads
-    # app.state.engine for every request.
+    # Do not run the app's lifespan (we own the engine/DB). TestClient
+    # without a context manager skips lifespan events entirely.
     app.state.engine = engine
-    with TestClient(app, raise_server_exceptions=True) as c:
-        yield c
+    c = TestClient(app, raise_server_exceptions=True)
+    yield c

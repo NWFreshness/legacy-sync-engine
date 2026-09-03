@@ -1,7 +1,9 @@
-"""Migration runner — applies db/migrations/*.sql in order, records applied
-versions in a schema_migrations table, and optionally loads db/seeds/.
+"""Migration runner — applies db/migrations/*.sql in order to BOTH
+databases. Statements tagged with `-- MODERN_BEGIN/END` go only to the
+modern_saas connection; `-- LEGACY_BEGIN/END` only to legacy_erp; everything
+else (including `-- BOTH_BEGIN/END`) goes to both.
 
-Forward-only; every up has a matching .down.sql (SOUL quality bar).
+Records applied versions in schema_migrations (one row per DB).
 """
 
 from __future__ import annotations
@@ -18,6 +20,30 @@ from .db import Database
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "db" / "migrations"
 SEEDS_DIR = Path(__file__).resolve().parent.parent / "db" / "seeds"
 
+_SECTION = re.compile(r"-- (MODERN|LEGACY|BOTH)_BEGIN|(--) (MODERN|LEGACY|BOTH)_END")
+
+
+def _split(text: str) -> dict[str, list[str]]:
+    """Return {modern: [...], legacy: [...], both: [...]} chunks of SQL."""
+    sections: dict[str, list[str]] = {"MODERN": [], "LEGACY": [], "BOTH": []}
+    current = "BOTH"  # anything outside a tag is shared
+    buf: list[str] = []
+    for line in text.splitlines(keepends=True):
+        m = _SECTION.match(line.strip())
+        if m:
+            if buf:
+                sections[current].append("".join(buf))
+                buf = []
+            if m.group(1):
+                current = m.group(1)
+            else:
+                current = "BOTH"
+        else:
+            buf.append(line)
+    if buf:
+        sections[current].append("".join(buf))
+    return sections
+
 
 def _applied(conn) -> set[str]:
     conn.execute(
@@ -31,8 +57,14 @@ def _applied(conn) -> set[str]:
     return {r["version"] for r in conn.execute("SELECT version FROM schema_migrations").fetchall()}
 
 
+def _exec_chunks(conn, chunks: list[str]) -> None:
+    for chunk in chunks:
+        s = chunk.strip()
+        if not s:
+            continue
+        conn.execute(sql.SQL(cast(LiteralString, s)))
+
 def migrate(db: Database, *, seed: bool = False) -> list[str]:
-    """Apply pending migrations to BOTH databases. Returns applied versions."""
     applied: list[str] = []
     files = sorted(
         p for p in MIGRATIONS_DIR.glob("*.sql") if not p.name.endswith(".down.sql")
@@ -44,15 +76,23 @@ def migrate(db: Database, *, seed: bool = False) -> list[str]:
                 version = path.name
                 if version in done:
                     continue
-                conn.execute(sql.SQL(cast(LiteralString, path.read_text())))
+                parts = _split(path.read_text())
+                if name == "modern":
+                    _exec_chunks(conn, parts["MODERN"] + parts["BOTH"])
+                else:
+                    _exec_chunks(conn, parts["LEGACY"] + parts["BOTH"])
                 conn.execute(
                     "INSERT INTO schema_migrations (version) VALUES (%s)", (version,)
                 )
                 applied.append(f"{name}:{version}")
             if seed:
                 for seed_path in sorted(SEEDS_DIR.glob("*.sql")):
-                    conn.execute(sql.SQL(cast(LiteralString, seed_path.read_text())))
-                applied.append(f"{name}:seed")
+                    parts = _split(seed_path.read_text())
+                    if name == "modern":
+                        _exec_chunks(conn, parts["MODERN"] + parts["BOTH"])
+                    else:
+                        _exec_chunks(conn, parts["LEGACY"] + parts["BOTH"])
+                    applied.append(f"{name}:seed")
     return applied
 
 

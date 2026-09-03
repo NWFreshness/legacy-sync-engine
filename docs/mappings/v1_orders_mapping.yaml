@@ -11,12 +11,18 @@ fields:
     type: string
     direction: both
     required: true
+    transform:
+      modern_to_legacy: "str(value)[:20] if value else None"
+      legacy_to_modern: "((str(value).strip().replace('-','').rjust(32,'0'))[:8] + '-' + (str(value).strip().replace('-','').rjust(32,'0'))[8:12] + '-' + (str(value).strip().replace('-','').rjust(32,'0'))[12:16] + '-' + (str(value).strip().replace('-','').rjust(32,'0'))[16:20] + '-' + (str(value).strip().replace('-','').rjust(32,'0'))[20:32]) if value else None"
 
   - modern_field: customer_id
     legacy_field: CUST_ID
     type: string
     direction: both
     required: true
+    transform:
+      modern_to_legacy: "str(value)[:20] if value else None"
+      legacy_to_modern: "((str(value).strip().replace('-','').rjust(32,'0'))[:8] + '-' + (str(value).strip().replace('-','').rjust(32,'0'))[8:12] + '-' + (str(value).strip().replace('-','').rjust(32,'0'))[12:16] + '-' + (str(value).strip().replace('-','').rjust(32,'0'))[16:20] + '-' + (str(value).strip().replace('-','').rjust(32,'0'))[20:32]) if value else None"
 
   - modern_field: order_date
     legacy_field: ORD_DT

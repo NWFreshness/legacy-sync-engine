@@ -65,7 +65,12 @@ def _coerce(value: Any, type_name: str, direction: Literal["modern_to_legacy", "
 
     Legacy DATE columns arrive as datetime.date; modern TIMESTAMPTZ expects
     datetime. Numeric legacy columns may arrive as strings; normalize.
+
+    Special: the YAML default `"NOW()"` resolves to the current time
+    (used for legacy tables that have no timestamp column).
     """
+    if isinstance(value, str) and value == "NOW()":
+        value = dt.datetime.now(dt.UTC)
     if value is None:
         return None
     try:

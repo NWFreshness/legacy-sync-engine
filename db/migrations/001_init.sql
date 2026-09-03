@@ -1,17 +1,14 @@
 -- legacy-sync-engine/db/migrations/001_init.sql
--- Migration of record (ADR-002). Idempotent: safe to re-run.
--- Design reference: docs/data_model.sql v1.1 (authoritative amendments).
+-- Migration of record (ADR-002). Applies to BOTH databases; each side's
+-- connection gets only its own schema. The runner (app.migrate) splits this
+-- file: `modern_*` statements to the modern_saas DB, `legacy_*` to legacy_erp.
 --
--- Applies to a single database; compose runs it against BOTH modern_saas and
--- legacy_erp so each side carries its own sync infrastructure for the demo
--- (audit/DLQ/conflicts are written to whichever DB the app is configured to
--- treat as "modern" — see MODERN_DSN/LEGACY_DSN).
-
-BEGIN;
+-- Design reference: docs/data_model.sql v1.1 (authoritative).
 
 -- =============================================
--- MODERN schema (skipped silently if this DB is the legacy side)
+-- MODERN side (applied to modern_saas only)
 -- =============================================
+-- MODERN_BEGIN
 CREATE SCHEMA IF NOT EXISTS modern;
 
 CREATE TABLE IF NOT EXISTS modern.customers (
@@ -44,42 +41,44 @@ CREATE TABLE IF NOT EXISTS modern.inventory (
     version INTEGER DEFAULT 1,
     last_synced_from TEXT
 );
+-- MODERN_END
 
 -- =============================================
--- LEGACY schema (ugly names, inconsistent types, some missing timestamps)
+-- LEGACY side (applied to legacy_erp only)
 -- =============================================
+-- LEGACY_BEGIN
 CREATE SCHEMA IF NOT EXISTS legacy;
 
-CREATE TABLE IF NOT EXISTS legacy.CUST_MSTR (
-    CUST_ID VARCHAR(20) PRIMARY KEY,
-    CUST_NAME VARCHAR(100) NOT NULL,
-    CUST_EMAIL VARCHAR(80),
-    CUST_CO VARCHAR(50),
-    STATUS_CD CHAR(1) DEFAULT 'A',
-    LAST_UPD_DT DATE,
-    VERSION_NO INTEGER DEFAULT 1,
-    LAST_SYNCED_FROM VARCHAR(20)
+CREATE TABLE IF NOT EXISTS legacy."CUST_MSTR" (
+    "CUST_ID" VARCHAR(20) PRIMARY KEY,
+    "CUST_NAME" VARCHAR(100) NOT NULL,
+    "CUST_EMAIL" VARCHAR(80),
+    "CUST_CO" VARCHAR(50),
+    "STATUS_CD" CHAR(1) DEFAULT 'A',
+    "LAST_UPD_DT" DATE,
+    "VERSION_NO" INTEGER DEFAULT 1,
+    "LAST_SYNCED_FROM" VARCHAR(20)
 );
 
-CREATE TABLE IF NOT EXISTS legacy.ORD_HDR (
-    ORD_ID VARCHAR(20) PRIMARY KEY,
-    CUST_ID VARCHAR(20) REFERENCES legacy.CUST_MSTR(CUST_ID),
-    ORD_DT DATE NOT NULL,
-    ORD_AMT NUMERIC(10,2),
-    ORD_STAT CHAR(1),
-    VERSION_NO INTEGER DEFAULT 1,
-    LAST_SYNCED_FROM VARCHAR(20)
+CREATE TABLE IF NOT EXISTS legacy."ORD_HDR" (
+    "ORD_ID" VARCHAR(20) PRIMARY KEY,
+    "CUST_ID" VARCHAR(20) REFERENCES legacy."CUST_MSTR"("CUST_ID"),
+    "ORD_DT" DATE NOT NULL,
+    "ORD_AMT" NUMERIC(10,2),
+    "ORD_STAT" CHAR(1),
+    "VERSION_NO" INTEGER DEFAULT 1,
+    "LAST_SYNCED_FROM" VARCHAR(20)
 );
 
-CREATE TABLE IF NOT EXISTS legacy.INV_BAL (
-    PROD_CD VARCHAR(20) PRIMARY KEY,
-    QTY_OH INTEGER NOT NULL,
-    LAST_REPL_DT DATE,
-    VERSION_NO INTEGER DEFAULT 1,
-    LAST_SYNCED_FROM VARCHAR(20)
+CREATE TABLE IF NOT EXISTS legacy."INV_BAL" (
+    "PROD_CD" VARCHAR(20) PRIMARY KEY,
+    "QTY_OH" INTEGER NOT NULL,
+    "LAST_REPL_DT" DATE,
+    "VERSION_NO" INTEGER DEFAULT 1,
+    "LAST_SYNCED_FROM" VARCHAR(20)
 );
 
-CREATE TABLE IF NOT EXISTS legacy.CHANGE_LOG (
+CREATE TABLE IF NOT EXISTS legacy."CHANGE_LOG" (
     log_id SERIAL PRIMARY KEY,
     table_name VARCHAR(30) NOT NULL,
     record_id VARCHAR(50) NOT NULL,
@@ -87,10 +86,12 @@ CREATE TABLE IF NOT EXISTS legacy.CHANGE_LOG (
     changed_at TIMESTAMPTZ DEFAULT NOW(),
     payload JSONB
 );
+-- LEGACY_END
 
 -- =============================================
--- SYNC INFRASTRUCTURE (ADR-002 amendments applied)
+-- SYNC INFRASTRUCTURE (applied to BOTH databases)
 -- =============================================
+-- BOTH_BEGIN
 CREATE TABLE IF NOT EXISTS sync_state (
     table_name TEXT NOT NULL,
     direction TEXT NOT NULL CHECK (direction IN ('modern_to_legacy', 'legacy_to_modern')),
@@ -144,13 +145,18 @@ CREATE TABLE IF NOT EXISTS dead_letter_queue (
 
 CREATE INDEX IF NOT EXISTS idx_audit_record ON audit_log(source_table, record_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_audit_conflict ON audit_log(conflict_id);
+CREATE INDEX IF NOT EXISTS idx_conflicts_pending ON conflicts(status, table_name);
+-- BOTH_END
+
+-- MODERN_BEGIN
 CREATE INDEX IF NOT EXISTS idx_last_synced_modern ON modern.customers(last_synced_from);
 CREATE INDEX IF NOT EXISTS idx_last_synced_orders ON modern.orders(last_synced_from);
 CREATE INDEX IF NOT EXISTS idx_last_synced_inventory ON modern.inventory(last_synced_from);
-CREATE INDEX IF NOT EXISTS idx_last_synced_legacy_cust ON legacy.CUST_MSTR(LAST_SYNCED_FROM);
-CREATE INDEX IF NOT EXISTS idx_last_synced_legacy_ord ON legacy.ORD_HDR(LAST_SYNCED_FROM);
-CREATE INDEX IF NOT EXISTS idx_last_synced_legacy_inv ON legacy.INV_BAL(LAST_SYNCED_FROM);
-CREATE INDEX IF NOT EXISTS idx_conflicts_pending ON conflicts(status, table_name);
-CREATE INDEX IF NOT EXISTS idx_change_log ON legacy.CHANGE_LOG(table_name, changed_at);
+-- MODERN_END
 
-COMMIT;
+-- LEGACY_BEGIN
+CREATE INDEX IF NOT EXISTS idx_last_synced_legacy_cust ON legacy."CUST_MSTR"("LAST_SYNCED_FROM");
+CREATE INDEX IF NOT EXISTS idx_last_synced_legacy_ord ON legacy."ORD_HDR"("LAST_SYNCED_FROM");
+CREATE INDEX IF NOT EXISTS idx_last_synced_legacy_inv ON legacy."INV_BAL"("LAST_SYNCED_FROM");
+CREATE INDEX IF NOT EXISTS idx_change_log ON legacy."CHANGE_LOG"(table_name, changed_at);
+-- LEGACY_END

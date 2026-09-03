@@ -34,7 +34,7 @@ def test_customer_roundtrip_modern_to_legacy_to_modern(registry):
         "updated_at": dt.datetime(2026, 9, 3, 12, 0, 0),
     }
     legacy = apply_mapping(mapping, modern, "modern_to_legacy")
-    assert legacy["CUST_ID"] == "C001"  # transform: upper
+    assert legacy["CUST_ID"] == "c001"  # transform: truncate to legacy VARCHAR(20)
     assert legacy["STATUS_CD"] == "A"
     assert legacy["CUST_EMAIL"] == "alice@acme.com"
 
