@@ -1,0 +1,48 @@
+# Versioned field mapping example
+# Used by SyncEngine to translate between modern_saas and legacy_erp schemas
+version: "1.0"
+table: "customers"
+source_of_truth: "modern"  # or "legacy" or "both" (requires conflict rules)
+conflict_strategy: "last_write_wins"  # last_write_wins | source_of_truth | manual_review
+clock_skew_tolerance_seconds: 5
+
+fields:
+  - modern_field: id
+    legacy_field: CUST_ID
+    type: string
+    direction: both
+    required: true
+    transform:
+      modern_to_legacy: "str(value).upper() if value else None"  # example
+      legacy_to_modern: "value.strip() if value else None"
+
+  - modern_field: email
+    legacy_field: CUST_EMAIL
+    type: string
+    direction: both
+    required: true
+
+  - modern_field: name
+    legacy_field: CUST_NAME
+    type: string
+    direction: both
+    required: true
+
+  - modern_field: company
+    legacy_field: CUST_CO
+    type: string
+    direction: both
+
+  - modern_field: status
+    legacy_field: STATUS_CD
+    type: string
+    direction: both
+    transform:
+      modern_to_legacy: " 'A' if value == 'active' else 'I' "
+      legacy_to_modern: " 'active' if value == 'A' else 'inactive' "
+
+  - modern_field: updated_at
+    legacy_field: LAST_UPD_DT
+    type: datetime
+    direction: both
+    default: "NOW()"

@@ -1,0 +1,30 @@
+sequenceDiagram
+    participant User
+    participant Modern as "modern_saas (Postgres)"
+    participant Poller as "Poller/Webhook Receiver"
+    participant Mapper as "Mapping Engine (YAML v1)"
+    participant Resolver as "Conflict Resolver"
+    participant Legacy as "legacy_erp (ugly Postgres)"
+    participant Audit as "audit_log + DLQ"
+    participant Admin as "FastAPI Admin API/UI"
+
+    User->>Modern: UPDATE customer (email changed)
+    Modern->>Poller: CDC trigger / webhook
+    Poller->>Mapper: normalize record
+    Mapper->>Resolver: check for concurrent legacy change
+    alt Conflict (clock skew or overlapping update)
+        Resolver->>Admin: queue in conflicts table (manual_review)
+        Admin->>User: GET /api/conflicts
+        User->>Admin: POST /resolve {chosen_state}
+        Admin->>Resolver: apply chosen + log
+    else No conflict (last-write-wins)
+        Resolver->>Legacy: apply mapped upsert (idempotent)
+        Legacy->>Audit: record before/after
+    end
+
+    Note over Modern,Legacy: Reverse direction works identically via legacy CHANGE_LOG + webhook
+    Note over Mapper: Bidirectional transforms, type casts, versioned configs
+    Note right of Audit: Every event immutable; dead_letter on poison records after 5 retries
+
+    User->>Admin: docker compose up --build --wait
+    Admin->>User: "Sync engine ready. Seeded dirty data with overlapping customer record."

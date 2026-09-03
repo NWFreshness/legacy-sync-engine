@@ -1,0 +1,234 @@
+/* ============================================================
+ * FDE Shared Tokens — v1
+ * Reusable across legacy-sync-engine, zero-trust-tenant-rag,
+ * and pii-redaction-proxy. Defined once. Imported everywhere.
+ *
+ * Aesthetic: forensic reconciliation console.
+ * Two-system duality (modern vs legacy), tactile resolution.
+ * NOT a CRUD admin. NOT amber/cyan. NOT purple.
+ * ============================================================ */
+
+:root {
+  /* — Surface palette ————————————————————————
+   * Deep slate-indigo ground, layered for elevation.
+   * Modern side reads cool/neutral; legacy side reads warm/parchment. */
+  --bg-void:        #07080d;   /* app background, deepest */
+  --bg-base:        #0b0d14;   /* page background */
+  --bg-elev-1:      #11141c;   /* panels, cards */
+  --bg-elev-2:      #181c26;   /* hover, selected */
+  --bg-elev-3:      #222737;   /* overlay, modal */
+  --bg-inset:       #08090e;   /* recessed areas */
+
+  /* Legacy-tinted panel — the "20-year-old ERP" side reads parchment-on-ink.
+   * Warm undertones deliberately contrast the modern side. */
+  --bg-legacy:      #1c1814;
+  --bg-legacy-hi:   #251e17;
+  --border-legacy:  #3d3022;
+
+  /* — Borders ————————————————————————
+   * Hairline dividers, never solid 1px borders everywhere. */
+  --border-faint:   #1a1e29;
+  --border-base:    #262b3a;
+  --border-strong:  #353c52;
+  --border-focus:   #a3b320;   /* matches primary accent */
+
+  /* — Foreground ———————————————————————— */
+  --fg-primary:     #e8ecf3;
+  --fg-secondary:   #9aa3b8;
+  --fg-muted:       #5d6678;
+  --fg-dim:         #3e4554;
+  --fg-legacy:      #d6c19a;   /* parchment for legacy records */
+
+  /* — Accents ————————————————————————
+   * Primary = "verified / reconciled" (lime, rare in this space).
+   * Danger = conflict / signal coral (vivid, urgent).
+   * Legacy-tinted accent for the ERP side. */
+  --accent-primary:       #a3b320;
+  --accent-primary-dim:   #a3b32024;
+  --accent-primary-glow:  #a3b32040;
+
+  --signal-conflict:      #f97316;
+  --signal-conflict-dim:  #f9731626;
+  --signal-conflict-glow: #f9731650;
+
+  --signal-info:          #5fb4d9;
+  --signal-info-dim:      #5fb4d926;
+
+  --signal-ok:            #6ec595;
+  --signal-warn:          #e0b94b;
+  --signal-fail:          #d76060;
+
+  /* — Type ————————————————————————
+   * IBM Plex Sans (body), IBM Plex Mono (technical),
+   * IBM Plex Serif (occasional editorial labels). */
+  --font-sans:    'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono:    'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-serif:   'IBM Plex Serif', Georgia, serif;
+
+  --fs-xs:   11px;
+  --fs-sm:   12px;
+  --fs-base: 13px;
+  --fs-md:   14px;
+  --fs-lg:   16px;
+  --fs-xl:   20px;
+  --fs-2xl:  28px;
+  --fs-3xl:  40px;
+  --fs-hero: 56px;
+
+  --lh-tight: 1.15;
+  --lh-snug:  1.35;
+  --lh-base:  1.55;
+
+  /* — Spacing ————————————————————————
+   * 4px grid. Use these, not arbitrary px. */
+  --sp-1:   4px;
+  --sp-2:   8px;
+  --sp-3:   12px;
+  --sp-4:   16px;
+  --sp-5:   20px;
+  --sp-6:   24px;
+  --sp-8:   32px;
+  --sp-10:  40px;
+  --sp-12:  48px;
+  --sp-16:  64px;
+
+  /* — Radii ————————————————————————
+   * Small radii; ops tools should feel precise, not soft. */
+  --r-xs: 2px;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --r-pill: 999px;
+
+  /* — Motion ————————————————————————
+   * One consistent motion language across all FDE demos. */
+  --ease-out:    cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0.1, 0.2, 1);
+  --ease-snap:   cubic-bezier(0.16, 1, 0.3, 1);
+
+  --dur-fast:   120ms;
+  --dur-base:   220ms;
+  --dur-slow:   400ms;
+  --dur-page:   600ms;
+
+  /* — Shadows ————————————————————————
+   * Subtle. Shadows are for elevation only, not glow. */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-glow-conflict: 0 0 0 1px var(--signal-conflict-dim), 0 0 16px var(--signal-conflict-glow);
+
+  /* — Layout ———————————————————————— */
+  --sidebar-w:   240px;
+  --header-h:    56px;
+  --content-max: 1440px;
+
+  /* — Background texture ————————————————————
+   * Subtle grid + grain. Pointer-events: none in usage. */
+  --grid-color: rgba(163, 179, 32, 0.035);
+  --grid-size:  40px;
+  --grain-opacity: 0.02;
+}
+
+/* ============================================================
+ * Reset (minimal, not Bootstrap)
+ * ============================================================ */
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; padding: 0; }
+body {
+  background: var(--bg-base);
+  color: var(--fg-primary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+button, input, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+button { cursor: pointer; background: none; border: none; padding: 0; }
+a { color: inherit; text-decoration: none; }
+
+/* Focus ring — visible, accent-tinted, not browser default. */
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+/* Scrollbar — restrained, themed. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg-void); }
+::-webkit-scrollbar-thumb {
+  background: var(--border-base);
+  border-radius: var(--r-pill);
+  border: 2px solid var(--bg-void);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+/* Selection */
+::selection {
+  background: var(--accent-primary-dim);
+  color: var(--fg-primary);
+}
+
+/* Screen-reader only utility */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0);
+  white-space: nowrap; border: 0;
+}
+
+/* ============================================================
+ * App-wide background: grid + grain
+ * ============================================================ */
+.app-shell {
+  position: relative;
+  min-height: 100vh;
+  isolation: isolate;
+}
+.app-shell::before {
+  /* Grid */
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(var(--grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+  background-size: var(--grid-size) var(--grid-size);
+  pointer-events: none;
+  z-index: 0;
+}
+.app-shell::after {
+  /* Vignette so content reads above grid */
+  content: '';
+  position: fixed; inset: 0;
+  background: radial-gradient(ellipse at top, transparent 0%, var(--bg-base) 75%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ============================================================
+ * Motion primitives — used by components
+ * ============================================================ */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+@keyframes page-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
