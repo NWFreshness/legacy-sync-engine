@@ -10,13 +10,16 @@ import urllib.request
 from playwright.async_api import async_playwright
 
 
-WEB_DIR = "/home/tylermayfield/Documents/FDE/legacy-sync-engine/web"
+WEB_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(WEB_DIR, ".visual-check")
 os.makedirs(OUT, exist_ok=True)
 
 
 def start_preview() -> tuple[subprocess.Popen, int]:
     env = os.environ.copy()
+    # Detach from any parent process group so the preview server survives
+    # between Playwright gotos (start_new_session=True is the modern
+    # equivalent of preexec_fn=os.setsid and works cross-platform).
     proc = subprocess.Popen(
         ["npm", "run", "preview"],
         cwd=WEB_DIR,
@@ -24,6 +27,7 @@ def start_preview() -> tuple[subprocess.Popen, int]:
         stderr=subprocess.STDOUT,
         env=env,
         text=True,
+        start_new_session=True,
     )
     # wait up to 30s for "Local:" — extract the port
     port = 4173

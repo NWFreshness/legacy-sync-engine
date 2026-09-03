@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .vite/
+.visual-check/
 *.local
 .env.local
 .env.*.local
