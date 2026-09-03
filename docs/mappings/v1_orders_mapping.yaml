@@ -1,0 +1,39 @@
+# Versioned field mapping: orders (modern source of truth)
+version: "1.0"
+table: "orders"
+source_of_truth: "modern"
+conflict_strategy: "source_of_truth_wins"
+clock_skew_tolerance_seconds: 5
+
+fields:
+  - modern_field: id
+    legacy_field: ORD_ID
+    type: string
+    direction: both
+    required: true
+
+  - modern_field: customer_id
+    legacy_field: CUST_ID
+    type: string
+    direction: both
+    required: true
+
+  - modern_field: order_date
+    legacy_field: ORD_DT
+    type: datetime
+    direction: both
+    required: true
+
+  - modern_field: total_amount
+    legacy_field: ORD_AMT
+    type: numeric
+    direction: both
+    required: true
+
+  - modern_field: status
+    legacy_field: ORD_STAT
+    type: string
+    direction: both
+    transform:
+      modern_to_legacy: " {'pending':'P','shipped':'S','delivered':'D','cancelled':'X'}.get(str(value), 'P') "
+      legacy_to_modern: " {'P':'pending','S':'shipped','D':'delivered','X':'cancelled'}.get(str(value).strip(), 'pending') "

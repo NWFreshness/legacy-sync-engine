@@ -1,0 +1,24 @@
+# Versioned field mapping: inventory (manual review — stock levels are money)
+version: "1.0"
+table: "inventory"
+source_of_truth: "both"
+conflict_strategy: "manual_review"
+clock_skew_tolerance_seconds: 5
+
+fields:
+  - modern_field: product_id
+    legacy_field: PROD_CD
+    type: string
+    direction: both
+    required: true
+
+  - modern_field: quantity
+    legacy_field: QTY_OH
+    type: integer
+    direction: both
+    required: true
+
+  - modern_field: last_restock
+    legacy_field: LAST_REPL_DT
+    type: datetime
+    direction: both

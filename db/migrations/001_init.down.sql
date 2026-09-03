@@ -1,0 +1,20 @@
+-- legacy-sync-engine/db/migrations/001_init.down.sql
+-- Reverses 001_init.sql completely (ADR-002: forward-only + reversible).
+
+BEGIN;
+
+DROP TABLE IF EXISTS dead_letter_queue CASCADE;
+DROP TABLE IF EXISTS audit_log CASCADE;
+DROP TABLE IF EXISTS conflicts CASCADE;
+DROP TABLE IF EXISTS sync_state CASCADE;
+DROP TABLE IF EXISTS legacy.CHANGE_LOG CASCADE;
+DROP TABLE IF EXISTS legacy.INV_BAL CASCADE;
+DROP TABLE IF EXISTS legacy.ORD_HDR CASCADE;
+DROP TABLE IF EXISTS legacy.CUST_MSTR CASCADE;
+DROP SCHEMA IF EXISTS legacy CASCADE;
+DROP TABLE IF EXISTS modern.inventory CASCADE;
+DROP TABLE IF EXISTS modern.orders CASCADE;
+DROP TABLE IF EXISTS modern.customers CASCADE;
+DROP SCHEMA IF EXISTS modern CASCADE;
+
+COMMIT;

@@ -13,7 +13,7 @@ from uuid import UUID
 
 SyncDirection = Literal["modern_to_legacy", "legacy_to_modern"]
 ResolutionStrategy = Literal["last_write_wins", "source_of_truth_wins", "manual_review"]
-SyncStatus = Literal["pending", "applied", "failed", "dead_lettered"]
+SyncStatus = Literal["pending", "applied", "conflicted", "failed", "dead_lettered"]
 
 class MappingField(BaseModel):
     modern_field: str
@@ -131,16 +131,14 @@ Standard HTTP: 400 bad mapping, 409 conflict (if not using queue), 429 rate limi
 - All writes check `event_id` in audit_log first.
 - Upsert uses `version` column + `ON CONFLICT DO UPDATE ... WHERE version = excluded.version - 1`.
 
-## Implementation Notes for @backend
-1. Implement `SyncEngine` with the exact method signatures implied above.
-2. Load mappings from `docs/mappings/*.yaml` at startup with validation.
-3. Poller runs every 5s (configurable); uses `sync_state` table.
-4. For legacy without timestamps, rely on `CHANGE_LOG`.
-5. Simulate clock skew in `tests/test_conflicts.py` by manually setting `updated_at` in past/future.
-6. Contract tests must roundtrip a record through mapping in both directions and survive conflict scenarios.
-7. Seed data via the `seed_dirty_data()` function on startup for demo.
+## Implementation Notes for @backend (updated per ADR-002)
+1. All 5 readings approved: idempotency (header/body event_id → audit INSERT first), LWW tie-break (tolerance → source-of-truth, else newer ts), transform sandbox (safe string/arith only; DLQ on violation), Conflict model with proposed_resolutions + modern-canonical states, dual /health + /api/health.
+2. Echo suppression via new last_synced_from columns (poller skips matching origin); composite PK on sync_state; audit status includes 'conflicted' + optional conflict_id FK; UNIQUE on dead_letter_queue.event_id. See updated data_model.sql + ADR-002.
+3. Migrations: db/migrations/001_init.sql (up + seed, idempotent) + 001_init.down.sql; docker/init/10-schema.sql sources it. docs/data_model.sql is design reference (amended).
+4. CLI: approved per AGENTS.md — `python -m app.cli trigger|conflicts|resolve|audit` thin wrapper over SyncEngine (curl variant also in README). No new HTTP surface.
+5. Poller 5s default, CHANGE_LOG for legacy, skew simulation in tests, full contract tests for duplicate/skew/out-of-order/DLQ/conflict. Seed via seed_dirty_data().
 
-This contract is binding. Changes require new ADR and @architect signoff. @frontend must consume these exact response shapes for the conflict queue UI. @qa will test the negative cases listed in ADR-001.
+This contract (with ADR-002 amendments) is binding. @backend unblocked for implementation. @frontend shapes unchanged. @qa/@devops use amended DDL. Changes require new ADR.
 
 **Sequence Diagram** (Mermaid — see docs/sequence.mmd):
 ```
