@@ -27,7 +27,7 @@ ON CONFLICT (product_id) DO NOTHING;
 -- have a real counterpart to compare against.
 INSERT INTO legacy."CUST_MSTR" ("CUST_ID", "CUST_NAME", "CUST_EMAIL", "CUST_CO", "STATUS_CD", "LAST_UPD_DT", "LAST_SYNCED_FROM")
 VALUES
-  ('00000000-0000-0000-0', 'Alice Smith (legacy)', 'alice.legacy@acme.com', 'ACME LEGACY', 'A', NOW() - INTERVAL '2 hours', NULL),
+  ('00000000-0000-0000-0', 'Alice Smith (legacy)', 'alice.legacy@acme.com', 'ACME LEGACY', 'A', DATE '2026-08-30', NULL),
   ('C001', 'Alice Drifted', 'alice.new@acme.com', 'ACME INC', 'A', CURRENT_DATE - 1, NULL),
   ('C002', 'Carol Danvers', 'carol@hal.com', 'HAL Enterprises', 'I', NULL, NULL)
 ON CONFLICT ("CUST_ID") DO NOTHING;

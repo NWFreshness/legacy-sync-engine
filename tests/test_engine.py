@@ -17,7 +17,11 @@ import pytest
 
 from app.schemas import WebhookPayload
 
+# Fixed reference timestamp for the test suite. The seed sets legacy
+# LAST_UPD_DT to a date clearly before this (2026-08-30) so LWW comparisons
+# are deterministic regardless of when the suite is run.
 NOW = dt.datetime(2026, 9, 3, 12, 0, 0, tzinfo=dt.UTC)
+SEED_LEGACY_DATE = dt.date(2026, 8, 30)  # 4 days before NOW — always "older"
 ALICE = "00000000-0000-0000-0000-000000000001"
 CUST = ALICE[:20]  # legacy PK after mapping transform
 
